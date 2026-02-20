@@ -1,0 +1,8 @@
+[package]
+name = "zombijs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+oxc_ast = "0.114.0"
+oxc_parser = "0.114.0"
