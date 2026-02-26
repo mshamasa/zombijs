@@ -7,11 +7,23 @@ use oxc::span::SourceType;
 use pico_args::Arguments;
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 use walkdir::WalkDir;
 
-fn setup_collections(dir: &str) -> (HashSet<String>, Vec<String>) {
+fn add_ext(dir: &str, p: &Path, set: &mut HashSet<String>) {
+    for ext in ["index.ts", "index.tsx"] {
+        let temp = Path::new(dir)
+            .join(p)
+            .join(ext)
+            .canonicalize()
+            .unwrap_or_default();
+        set.insert(String::from(temp.to_str().unwrap()));
+    }
+}
+
+fn setup_collections(dir: &str) -> (HashSet<String>, HashSet<String>) {
     let mut all_files_set = HashSet::new();
-    let mut imports_set = HashSet::new();
+    let mut imports_queue_set: HashSet<String> = HashSet::new();
 
     for entry in WalkDir::new(&dir)
         .into_iter()
@@ -20,6 +32,7 @@ fn setup_collections(dir: &str) -> (HashSet<String>, Vec<String>) {
         let entry = entry.unwrap();
         let path = entry.path();
         // skip directories and all files that are NOT (JS|TS|JSX|TSX)
+        println!("walking=====dir={:?}, path={:?}", entry, path);
         println!("extension====={:?}", path.extension());
         match path.extension() {
             None => continue,
@@ -32,9 +45,13 @@ fn setup_collections(dir: &str) -> (HashSet<String>, Vec<String>) {
                 }
             },
         }
-        println!("walking====={:?}, {:?}", entry, path);
-        let p = path.to_str().unwrap_or_default();
-        all_files_set.insert(p.to_string());
+        let full_path = Path::new(path).canonicalize();
+        match full_path {
+            Ok(p) => {
+                all_files_set.insert(String::from(p.to_str().unwrap()));
+            }
+            Err(_e) => {}
+        }
 
         let source_text = fs::read_to_string(path).unwrap_or_default();
 
@@ -53,15 +70,34 @@ fn setup_collections(dir: &str) -> (HashSet<String>, Vec<String>) {
                 // todo - check path against common shorthand imports
                 // ./components/Card === ./components/Card/index.(ts|tsx)
                 if source.starts_with(".") {
-                    imports_set.insert(source);
+                    let path = Path::new(&source);
+                    println!("path====={:?}", path.extension());
+                    match path.extension() {
+                        Some(ext)
+                            if !["ts", "tsx", "js", "jsx"].contains(&ext.to_str().unwrap()) =>
+                        {
+                            continue;
+                        }
+                        None => {
+                            add_ext(dir, path, &mut imports_queue_set);
+                        }
+                        _ => {
+                            let x = Path::new(&dir)
+                                .join(&source)
+                                .canonicalize()
+                                .unwrap_or_default();
+                            imports_queue_set.insert(String::from(x.to_str().unwrap()));
+                        }
+                    }
                 }
             }
         }
     }
 
-    let imports_queue = imports_set.into_iter().collect();
+    all_files_set.remove("");
+    imports_queue_set.remove("");
 
-    (all_files_set, imports_queue)
+    (all_files_set, imports_queue_set)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,10 +108,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("The first argument is required. Example: cargo run -- <valid directory>");
     println!("Working dir====: {}", dir);
 
-    let (all_files_set, imports_queue) = setup_collections(&dir);
+    let (all_files_set, imports_queue_set) = setup_collections(&dir);
 
     println!("all files====={:?}", all_files_set);
-    println!("queue====={:?}", imports_queue);
+    println!("queue====={:?}", imports_queue_set);
 
     Ok(())
 }
