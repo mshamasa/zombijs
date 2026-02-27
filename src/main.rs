@@ -90,16 +90,11 @@ fn setup_collections(dir: &str) -> (HashSet<String>, HashSet<String>) {
                 }
             },
         }
-        let full_path = Path::new(path).canonicalize();
-        match full_path {
-            Ok(p) => {
-                all_files_set.insert(String::from(p.to_str().unwrap()));
-            }
-            Err(_e) => {}
-        }
+
+        let full_path = Path::new(path).canonicalize().unwrap_or_default();
+        all_files_set.insert(String::from(full_path.to_str().unwrap()));
 
         let source_text = fs::read_to_string(path).unwrap_or_default();
-
         let allocator = Allocator::default();
         let source_type = SourceType::from_path(path).unwrap();
 
@@ -150,10 +145,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let active_files_set = get_active_files(&imports_queue_set);
     let dead_files = all_files_set.difference(&active_files_set);
 
-    println!("all_files_set====={:?}", all_files_set);
-    println!("imports_queue_set====={:?}", imports_queue_set);
-    println!("active_files_set====={:?}", active_files_set);
-    println!("dead_files====={:?}", dead_files);
+    for file in dead_files {
+        println!("{}", file);
+    }
 
     Ok(())
 }
